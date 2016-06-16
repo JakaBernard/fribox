@@ -17,15 +17,29 @@ var streznik = http.createServer(function(zahteva, odgovor) {
    } else if (zahteva.url == '/datoteke') { 
        posredujSeznamDatotek(odgovor);
    } else if (zahteva.url.startsWith('/brisi')) { 
-       izbrisiDatoteko(odgovor, dataDir + zahteva.url.replace("/brisi", ""));
+       izbrisiDatoteko(odgovor, dataDir + zahteva.url.replace("/brisi", "")); 
+   } else if (zahteva.url.startsWith('/poglej')) { 
+       posredujStaticnoVsebino(odgovor, dataDir + zahteva.url.replace("/poglej", ""), ""); //drugi parameter je: kaj naj posreduje datadir==kjer so datoteke, +zahteva.url... je pa datoteka, ki jo hocmo
    } else if (zahteva.url.startsWith('/prenesi')) { 
-       posredujStaticnoVsebino(odgovor, dataDir + zahteva.url.replace("/prenesi", ""), "application/octet-stream");
+       posredujStaticnoVsebino(odgovor, dataDir + zahteva.url.replace("/prenesi", ""), "application/octet-stream"); //tale ta zadnji string je content type
    } else if (zahteva.url == "/nalozi") {
        naloziDatoteko(zahteva, odgovor);
    } else {
        posredujStaticnoVsebino(odgovor, './public' + zahteva.url, "");
    }
 });
+
+function izbrisiDatoteko(odgovor, datoteka) {
+    odgovor.writeHead(200, {'Content-Type': 'text/plain'});
+    fs.unlink(datoteka, function(napaka){
+        if (napaka) {
+           posredujNapako404(odgovor);
+        } else {
+            odgovor.write('Datoteka izbrisana');
+            odgovor.end();
+        }
+    })
+}
 
 function posredujOsnovnoStran(odgovor) {
     posredujStaticnoVsebino(odgovor, './public/fribox.html', "");
@@ -37,12 +51,14 @@ function posredujStaticnoVsebino(odgovor, absolutnaPotDoDatoteke, mimeType) {
                 fs.readFile(absolutnaPotDoDatoteke, function(napaka, datotekaVsebina) {
                     if (napaka) {
                         //Posreduj napako
+                        posredujNapako500(odgovor); //ce obstaja je naceloma server kriv, ker je pac pokvarjen al neki
                     } else {
                         posredujDatoteko(odgovor, absolutnaPotDoDatoteke, datotekaVsebina, mimeType);
                     }
                 })
             } else {
                 //Posreduj napako
+                posredujNapako404(odgovor);  //odjemalc kriv, ker je dal zahtevo, ki je streznik ne more izpolnit
             }
         })
 }
@@ -62,6 +78,7 @@ function posredujSeznamDatotek(odgovor) {
     fs.readdir(dataDir, function(napaka, datoteke) {
         if (napaka) {
             //Posreduj napako
+            posredujNapako500(odgovor); //streznik kriv, nima seznama al neki
         } else {
             var rezultat = [];
             for (var i=0; i<datoteke.length; i++) {
@@ -89,9 +106,27 @@ function naloziDatoteko(zahteva, odgovor) {
         fs.copy(zacasnaPot, dataDir + datoteka, function(napaka) {  
             if (napaka) {
                 //Posreduj napako
+                posredujNapako500();  //ker je streznik zadolzen, da preverja, kaj mu dojemalec posilja
             } else {
                 posredujOsnovnoStran(odgovor);        
             }
         });
     });
+}
+
+streznik.listen(process.env.PORT, function(){
+    console.log("IT'S ALIIIIIVEEEE!!! (aka strežnik je pognan ...)")
+})
+
+//Napake
+function posredujNapako404(odgovor) {
+    odgovor.writeHead(404, {'Content-Type': 'text/plain'});
+    odgovor.write('Napaka 404: Vira ni mogoče najti!');
+    odgovor.end();
+}
+
+function posredujNapako500(odgovor) {
+    odgovor.writeHead(500, {'Content-Type': 'text/plain'});
+    odgovor.write('Napaka 500: Prišlo je do napake na strežniku!');
+    odgovor.end();
 }
